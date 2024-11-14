@@ -52,7 +52,7 @@ IF $(var) > 1 THEN
 	Join (P2P_LOG_CLEANING)
     LOAD Distinct
     	[%KEY_CASEID],
-        True()			AS FLAG_irr_CaseID
+        True()						AS FLAG_irr_CaseID
     Resident TEMP;
     Drop Table TEMP;
 ENDIF
@@ -70,8 +70,8 @@ Drop Table P2P_LOG_CLEANING;
 //Keeping track of impact on the dataset by applying Filter 01/03
 Concatenate(CURRENT_CASES)
 LOAD Distinct
-	'FILTER_01'									AS State,
-	Count(DISTINCT [%KEY_CASEID]) 				AS CurrentCases,    
+	'FILTER_01'					AS State,
+	Count(DISTINCT [%KEY_CASEID]) 			AS CurrentCases,    
     Count(DISTINCT LOG_ActionCodeShort) 		AS CurrentActivities
 Resident P2P_MANUALFILTERS
 Order by LOG_TimeStamp;
