@@ -11,8 +11,8 @@
 //(for numerical sorting and better readability of the action-set)
 MAP_ACTIONCODES:
 Mapping LOAD Distinct
-	LOG_ActionCodeShort						AS ActivityName,
-    AutoNumber(LOG_ActionCodeShort)			AS ActivityNo
+	LOG_ActionCodeShort					AS ActivityName,
+    AutoNumber(LOG_ActionCodeShort)				AS ActivityNo
 Resident P2P_MANUALFILTERS;
 
 TEMP01:
@@ -20,15 +20,15 @@ NoConcatenate
 Load Distinct
 	[%KEY_CASEID],
     ApplyMap('MAP_ACTIONCODES', 
-    	LOG_ActionCodeShort, 'ERROR')		AS ActivityNo
+    	LOG_ActionCodeShort, 'ERROR')				AS ActivityNo
 Resident P2P_MANUALFILTERS;
 
 //Create list of unique action codes and their set of unique activities
 //sorted indentically per Case-ID (numerical, ascending) 
 TEMP02:
 LOAD Distinct
-	[%KEY_CASEID]							AS CASEID,
-    Concat(DISTINCT ActivityNo, ', ')		AS ACTIVITY
+	[%KEY_CASEID]						AS CASEID,
+    Concat(DISTINCT ActivityNo, ', ')				AS ACTIVITY
 Resident TEMP01
 Group By [%KEY_CASEID]
 Order By ActivityNo asc;
@@ -38,13 +38,13 @@ Drop Table TEMP01;
 MAP_UNIQUE_ACTIVITYSETS:
 Mapping LOAD
 	ACTIVITY,
-    IF(Count(CASEID) = 1, True(), False())	AS FLAG_uniqueActivity
+    IF(Count(CASEID) = 1, True(), False())			AS FLAG_uniqueActivity
 Resident TEMP02
 Group By ACTIVITY;
 
 Left Join(P2P_MANUALFILTERS)
 Load Distinct
-	CASEID													AS [%KEY_CASEID],
+	CASEID							AS [%KEY_CASEID],
     ApplyMap('MAP_UNIQUE_ACTIVITYSETS', ACTIVITY, 'ERROR') 	AS FLAG_uniqueActivity
 Resident TEMP02;
 Drop Table TEMP02;
@@ -61,8 +61,8 @@ Drop Table P2P_MANUALFILTERS;
 //Keeping track of impact on the dataset by applying Filter 02/03
 Concatenate(CURRENT_CASES)
 LOAD Distinct
-	'FILTER_02'									AS State,
+	'FILTER_02'						AS State,
 	Count(DISTINCT [%KEY_CASEID]) 				AS CurrentCases,
-    Count(DISTINCT LOG_ActionCodeShort)			AS CurrentActivities
+    Count(DISTINCT LOG_ActionCodeShort)				AS CurrentActivities
 Resident P2P_LOG_REDUCTION
 Order by LOG_TimeStamp;
