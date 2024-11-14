@@ -1,0 +1,109 @@
+//DATA CLEANSING: DIRECT DEPENDENCY FILTER 03/03
+//Any activity following a preceeding activity and showing an indentical/specified global amount
+//of Case-IDs passing this activity as it´s predecessor is considered "directly dependend":
+//Difference in & between 1st & 2nd passthrough count to allow for being considered "directly dependend"
+//can be specified by var_NoiseThreshold.
+//
+//A) All actions get assigned a fix global Case-ID passthrough count
+// (unique actions-set is considered, independently of the order of excecution)
+//B) Whenever an activity follows an activity with identical Case-ID passthrough count, 
+// the entire row containing the related activity is being deleted from the dataset:
+// (first occurance remains in the dataset => first timestamp marks start of the new activity-group)
+
+
+//Create a Mapping-Table mapping Activity-Name on Number of Case-Passthroughs in the Event-Log
+//(Global-Passthrough-Count)
+MAP_PASSTHROUGHCOUNT:
+Mapping LOAD Distinct
+    LOG_ActionCodeShort,
+    Count(LOG_ActionCodeShort)						AS GlobalPassThroughCount
+Resident P2P_LOG_REDUCTION
+Group By LOG_ActionCodeShort;
+
+//Specifiy the threshold for case passthrough count differences to be considered "directly dependend"
+LET var_NoiseThreshold = 1/1000 * 2;
+
+//Flag all directly depended activities in the Event-Log
+P2P_LOG_GROUPED:
+LOAD*,
+	IF(		Peek(PassThroughCount) 		<= 	(PassThroughCount + PassThroughCount * $(var_NoiseThreshold))
+    	AND	Peek(PassThroughCount) 		>= 	(PassThroughCount - PassThroughCount * $(var_NoiseThreshold))
+    	AND	Peek([%KEY_CASEID]) 		= 	[%KEY_CASEID]
+        AND Peek(LOG_ActionCodeShort) 	<> 	LOG_ActionCodeShort, 
+    	True(), False()) 							AS FLAG_dependendActivity;
+Load*,
+	ApplyMap('MAP_PASSTHROUGHCOUNT', 
+    	LOG_ActionCodeShort, 'ERROR')				AS PassThroughCount
+Resident P2P_LOG_REDUCTION
+Order by [%KEY_CASEID], LOG_TimeStamp asc;
+Drop Table P2P_LOG_REDUCTION;
+
+//Find all distinct directly dependend activity groups by size of their Passthrough-Count
+TEMP_01:
+NoConcatenate
+LOAD
+	FLAG_dependendActivity,
+	Text(Concat(DISTINCT PassThroughCount, ';'))	AS syssubprocess
+Resident P2P_LOG_GROUPED
+Where FLAG_dependendActivity = True()
+Group By FLAG_dependendActivity;
+
+LET varSYSSUBPROCESS = Peek('syssubprocess', 0, 'TEMP_01');
+Drop Table TEMP_01;
+
+LET var = SubStringCount('$(varSYSSUBPROCESS)', ';') + 1;
+
+//Nameing of the different directly dependend activity groups as "SubProzess01", SubProzess02", etc
+IF $(var) > 1 THEN
+    SYSSUBPROCESS:
+    LOAD
+      SubField('$(varSYSSUBPROCESS)', ';', 1) 			AS SubprocessNo,
+      'SubProzess_0' & '1' 								AS SubprocessName
+      AutoGenerate 1;
+      
+    LET i = 2;
+
+    DO while i > 1 AND i <= var
+        Join(SYSSUBPROCESS)
+        LOAD
+          SubField('$(varSYSSUBPROCESS)', ';', $(i)) 	AS SubprocessNo,
+          'SubProzess_0' & '$(i)' 						AS SubprocessName
+          AutoGenerate 1;
+    LET i = $(i) + 1;
+    LOOP
+ENDIF
+
+//Create a Mapping Table mapping the Global-Passthrough-Count on Activity-Name
+MAP_SYSSUBPROCESS:
+Mapping LOAD*
+Resident SYSSUBPROCESS;
+Drop Table SYSSUBPROCESS;
+
+//Create the Event-Log reduced to grouped activities which are directly dependend
+//names as "SubProzess01", "SubProzess02", etc
+P2P_LOG:
+LOAD
+	IF(IsText(	FLAG_IsSubProcess), 
+    			FLAG_IsSubProcess,
+                LOG_ActionCodeShort)					AS P2P_ActionCode,
+    LOG_TimeStamp										AS P2P_TimeStamp,
+    [%KEY_CASEID], 
+    LOG_FLAG_SysTask									AS FLAG_SysTask;
+LOAD*,
+	ApplyMap(	'MAP_SYSSUBPROCESS', 
+    			PassThroughCount, 
+                False())								AS FLAG_IsSubProcess
+Resident P2P_LOG_GROUPED
+Where FLAG_dependendActivity = False();
+Drop Table P2P_LOG_GROUPED;
+
+//Keeping track of impact on the dataset by applying Filter 03/03
+Concatenate(CURRENT_CASES)
+LOAD Distinct
+	'FILTER_03'									AS State,
+	Count(DISTINCT [%KEY_CASEID]) 				AS CurrentCases,
+    Count(DISTINCT P2P_ActionCode) 				AS CurrentActivities
+Resident P2P_LOG
+Order by P2P_TimeStamp;
+
+
