@@ -1,0 +1,68 @@
+//DATA CLEANSING: NOISE FILTER 02/03
+//Any series of activities being excecuted once only within the entire dataset = Noise
+//Noise is hereafter detectd and filtered as follows:
+//A) All Actions are sorted in identical order per case 
+// (unique actions-set is considered, independently of the order of excecution)
+//B) All duplicated actions are omitted 
+// (loops and self-loops are ignored)
+
+
+//Get all unique actions in the action log and assign a unique integer per action
+//(for numerical sorting and better readability of the action-set)
+MAP_ACTIONCODES:
+Mapping LOAD Distinct
+	LOG_ActionCodeShort						AS ActivityName,
+    AutoNumber(LOG_ActionCodeShort)			AS ActivityNo
+Resident P2P_MANUALFILTERS;
+
+TEMP01:
+NoConcatenate
+Load Distinct
+	[%KEY_CASEID],
+    ApplyMap('MAP_ACTIONCODES', 
+    	LOG_ActionCodeShort, 'ERROR')		AS ActivityNo
+Resident P2P_MANUALFILTERS;
+
+//Create list of unique action codes and their set of unique activities
+//sorted indentically per Case-ID (numerical, ascending) 
+TEMP02:
+LOAD Distinct
+	[%KEY_CASEID]							AS CASEID,
+    Concat(DISTINCT ActivityNo, ', ')		AS ACTIVITY
+Resident TEMP01
+Group By [%KEY_CASEID]
+Order By ActivityNo asc;
+Drop Table TEMP01;
+
+//Count amount of Case-IDs per unique activity-set and flag unique Case-IDs:
+MAP_UNIQUE_ACTIVITYSETS:
+Mapping LOAD
+	ACTIVITY,
+    IF(Count(CASEID) = 1, True(), False())	AS FLAG_uniqueActivity
+Resident TEMP02
+Group By ACTIVITY;
+
+Left Join(P2P_MANUALFILTERS)
+Load Distinct
+	CASEID													AS [%KEY_CASEID],
+    ApplyMap('MAP_UNIQUE_ACTIVITYSETS', ACTIVITY, 'ERROR') 	AS FLAG_uniqueActivity
+Resident TEMP02;
+Drop Table TEMP02;
+ 
+//Conditional Reload of the dataset: 
+//flagged Case-IDs are ignored/filtered:
+P2P_LOG_REDUCTION:
+NoConcatenate
+LOAD*
+Resident P2P_MANUALFILTERS
+Where FLAG_uniqueActivity = False();
+Drop Table P2P_MANUALFILTERS;
+
+//Keeping track of impact on the dataset by applying Filter 02/03
+Concatenate(CURRENT_CASES)
+LOAD Distinct
+	'FILTER_02'									AS State,
+	Count(DISTINCT [%KEY_CASEID]) 				AS CurrentCases,
+    Count(DISTINCT LOG_ActionCodeShort)			AS CurrentActivities
+Resident P2P_LOG_REDUCTION
+Order by LOG_TimeStamp;
