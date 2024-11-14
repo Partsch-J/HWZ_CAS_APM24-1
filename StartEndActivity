@@ -1,0 +1,34 @@
+//	Setting an artitificial START & END Activity for every Case-ID at 1 Second
+//	before and after the last activity per task respectively to unify entry & exit points of all arcs:
+//	(Optimizing the dataset for pythons comformance checking funtion pm4py.algo.algorithm.evaluate)
+
+//Artificial Start-Activity per case named as 'START' in the Activity Log
+Concatenate(P2P_LOG)
+LOAD*,
+    True()									AS FLAG_SysTask,
+    'START'									AS P2P_ActionCode;
+LOAD Distinct
+	[%KEY_CASEID],
+    Min(P2P_TimeStamp) - 1/24/60/60			AS P2P_TimeStamp
+Resident P2P_LOG
+Group By [%KEY_CASEID]; 
+
+//Artificial Ending-Activity per case named as 'END' in the Activity Log
+Concatenate(P2P_LOG)
+LOAD*,
+    True()									AS FLAG_SysTask,
+    'END'									AS P2P_ActionCode;
+LOAD Distinct
+	[%KEY_CASEID],
+    Max(P2P_TimeStamp) + 1/24/60/60		 	AS P2P_TimeStamp
+Resident P2P_LOG
+Group By [%KEY_CASEID]; 
+
+
+Concatenate(CURRENT_CASES)
+LOAD Distinct
+	'START / END'								AS State,
+	Count(DISTINCT [%KEY_CASEID]) 				AS CurrentCases,
+    Count(DISTINCT P2P_ActionCode) 				AS CurrentActivities
+Resident P2P_LOG
+Order by P2P_TimeStamp;
