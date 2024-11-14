@@ -1,6 +1,6 @@
 //	Setting an artitificial START & END Activity for every Case-ID at 1 Second
 //	before and after the last activity per task respectively to unify entry & exit points of all arcs:
-//	(Optimizing the dataset for pythons comformance checking funtion pm4py.algo.algorithm.evaluate)
+//	(Optimizing the dataset for pythons conformance checking function pm4py.algo.algorithm.evaluate)
 
 //Artificial Start-Activity per case named as 'START' in the Activity Log
 Concatenate(P2P_LOG)
