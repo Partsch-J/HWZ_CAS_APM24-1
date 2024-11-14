@@ -26,14 +26,14 @@ LET var_NoiseThreshold = 1/1000 * 2;
 //Flag all directly depended activities in the Event-Log
 P2P_LOG_GROUPED:
 LOAD*,
-	IF(		Peek(PassThroughCount) 		<= 	(PassThroughCount + PassThroughCount * $(var_NoiseThreshold))
+	IF(		Peek(PassThroughCount) 	<= 	(PassThroughCount + PassThroughCount * $(var_NoiseThreshold))
     	AND	Peek(PassThroughCount) 		>= 	(PassThroughCount - PassThroughCount * $(var_NoiseThreshold))
     	AND	Peek([%KEY_CASEID]) 		= 	[%KEY_CASEID]
-        AND Peek(LOG_ActionCodeShort) 	<> 	LOG_ActionCodeShort, 
-    	True(), False()) 							AS FLAG_dependendActivity;
+        AND Peek(LOG_ActionCodeShort) 		<> 	LOG_ActionCodeShort, 
+    	True(), False()) 						AS FLAG_dependendActivity;
 Load*,
 	ApplyMap('MAP_PASSTHROUGHCOUNT', 
-    	LOG_ActionCodeShort, 'ERROR')				AS PassThroughCount
+    	LOG_ActionCodeShort, 'ERROR')					AS PassThroughCount
 Resident P2P_LOG_REDUCTION
 Order by [%KEY_CASEID], LOG_TimeStamp asc;
 Drop Table P2P_LOG_REDUCTION;
@@ -43,7 +43,7 @@ TEMP_01:
 NoConcatenate
 LOAD
 	FLAG_dependendActivity,
-	Text(Concat(DISTINCT PassThroughCount, ';'))	AS syssubprocess
+	Text(Concat(DISTINCT PassThroughCount, ';'))			AS syssubprocess
 Resident P2P_LOG_GROUPED
 Where FLAG_dependendActivity = True()
 Group By FLAG_dependendActivity;
@@ -57,8 +57,8 @@ LET var = SubStringCount('$(varSYSSUBPROCESS)', ';') + 1;
 IF $(var) > 1 THEN
     SYSSUBPROCESS:
     LOAD
-      SubField('$(varSYSSUBPROCESS)', ';', 1) 			AS SubprocessNo,
-      'SubProzess_0' & '1' 								AS SubprocessName
+      SubField('$(varSYSSUBPROCESS)', ';', 1) 				AS SubprocessNo,
+      'SubProzess_0' & '1' 						AS SubprocessName
       AutoGenerate 1;
       
     LET i = 2;
@@ -67,7 +67,7 @@ IF $(var) > 1 THEN
         Join(SYSSUBPROCESS)
         LOAD
           SubField('$(varSYSSUBPROCESS)', ';', $(i)) 	AS SubprocessNo,
-          'SubProzess_0' & '$(i)' 						AS SubprocessName
+          'SubProzess_0' & '$(i)' 					AS SubprocessName
           AutoGenerate 1;
     LET i = $(i) + 1;
     LOOP
@@ -86,13 +86,13 @@ LOAD
 	IF(IsText(	FLAG_IsSubProcess), 
     			FLAG_IsSubProcess,
                 LOG_ActionCodeShort)					AS P2P_ActionCode,
-    LOG_TimeStamp										AS P2P_TimeStamp,
+    LOG_TimeStamp							AS P2P_TimeStamp,
     [%KEY_CASEID], 
-    LOG_FLAG_SysTask									AS FLAG_SysTask;
+    LOG_FLAG_SysTask							AS FLAG_SysTask;
 LOAD*,
 	ApplyMap(	'MAP_SYSSUBPROCESS', 
     			PassThroughCount, 
-                False())								AS FLAG_IsSubProcess
+                False())						AS FLAG_IsSubProcess
 Resident P2P_LOG_GROUPED
 Where FLAG_dependendActivity = False();
 Drop Table P2P_LOG_GROUPED;
@@ -100,9 +100,9 @@ Drop Table P2P_LOG_GROUPED;
 //Keeping track of impact on the dataset by applying Filter 03/03
 Concatenate(CURRENT_CASES)
 LOAD Distinct
-	'FILTER_03'									AS State,
-	Count(DISTINCT [%KEY_CASEID]) 				AS CurrentCases,
-    Count(DISTINCT P2P_ActionCode) 				AS CurrentActivities
+	'FILTER_03'							AS State,
+	Count(DISTINCT [%KEY_CASEID]) 					AS CurrentCases,
+    	Count(DISTINCT P2P_ActionCode) 					AS CurrentActivities
 Resident P2P_LOG
 Order by P2P_TimeStamp;
 
