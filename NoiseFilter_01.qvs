@@ -1,0 +1,79 @@
+//DATA CLEANSING: NOISE FILTER 01/03
+//Any series of activities being excecuted once only within the entire dataset = Noise
+//Noise is hereafter detectd and filtered as follows:
+//A) All Actions are sorted in identical order per case 
+// (unique actions-set is considered, independently of the order of excecution)
+//B) All duplicated actions are omitted 
+// (loops and self-loops are ignored)
+
+//Give a string of semicolon seperated (';') keywords or full text of the activity to be omitted:
+//ALL TRACES PASSING THIS ACTIVITY WILL BE ENTIRELY REMOVED FROM THE LOG
+//(to be used to remove cases that pass rare, irrelevant activities)
+
+
+//Key-Word-List for activities to be omitted from the dataset
+SET var_IRR_ACTIVITIES = 'Recovery;Hold;Rows Imported';
+
+
+
+LET var = SubStringCount('$(var_IRR_ACTIVITIES)', ';') + 1;
+
+//Find all Case-IDs which pass at least one activity containing
+//one of the listed Key-Words in var_IRR_ACTIVITIES
+IF $(var) > 1 THEN
+
+    //Initiate Table TEMP
+    LET i = 1;     
+    LET var_IRRAct = SubField('$(var_IRR_ACTIVITIES)', ';', $(i));
+    TEMP:
+    LOAD Distinct
+        %KEY_CASEID
+    Resident P2P_LOG_CLEANING
+    Where Wildmatch(LOG_ActionCodeShort, '*$(var_IRRAct)*') > 0
+    OR 	  Wildmatch(LOG_ActionCodeShort, ' $(var_IRRAct)*') > 0
+    OR 	  Wildmatch(LOG_ActionCodeShort, '*$(var_IRRAct)') 	> 0;    
+	LET i = i + 1;
+    
+    //Populate Table TEMP
+    DO WHILE i <= var
+    	
+        LET var_IRRAct = SubField('$(var_IRR_ACTIVITIES)', ';', $(i));
+        Concatenate(TEMP)
+        LOAD Distinct
+            %KEY_CASEID
+        Resident P2P_LOG_CLEANING
+        Where Wildmatch(LOG_ActionCodeShort, '*$(var_IRRAct)*') > 0
+        OR 	  Wildmatch(LOG_ActionCodeShort, ' $(var_IRRAct)*') > 0
+        OR 	  Wildmatch(LOG_ActionCodeShort, '*$(var_IRRAct)') 	> 0; 
+    	LET i = i + 1;
+    LOOP
+
+    //Join column FLAG_irr_CaseID to Event-Log for filtering on FLAG_irr_CaseID
+	Join (P2P_LOG_CLEANING)
+    LOAD Distinct
+    	[%KEY_CASEID],
+        True()			AS FLAG_irr_CaseID
+    Resident TEMP;
+    Drop Table TEMP;
+ENDIF
+
+//Apply Filtering and remove FLAG_irr_CaseID from Event-Data
+P2P_MANUALFILTERS:
+NoConcatenate
+LOAD*
+Resident P2P_LOG_CLEANING
+Where FLAG_irr_CaseID <> True();
+
+Drop Field FLAG_irr_CaseID from P2P_MANUALFILTERS;
+Drop Table P2P_LOG_CLEANING;
+
+//Keeping track of impact on the dataset by applying Filter 01/03
+Concatenate(CURRENT_CASES)
+LOAD Distinct
+	'FILTER_01'									AS State,
+	Count(DISTINCT [%KEY_CASEID]) 				AS CurrentCases,    
+    Count(DISTINCT LOG_ActionCodeShort) 		AS CurrentActivities
+Resident P2P_MANUALFILTERS
+Order by LOG_TimeStamp;
+
+
